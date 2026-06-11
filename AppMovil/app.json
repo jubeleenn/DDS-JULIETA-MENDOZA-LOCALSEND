@@ -1,4 +1,8 @@
 {
   "name": "AppMovil",
-  "displayName": "AppMovil"
+  "extra": {
+    "eas": {
+      "projectId": "9ccc3af4-b228-41d3-9044-83ec11028f1d"
+    }
+  }
 }

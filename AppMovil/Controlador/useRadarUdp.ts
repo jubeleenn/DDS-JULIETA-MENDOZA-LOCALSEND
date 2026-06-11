@@ -1,18 +1,14 @@
 import { useState } from 'react';
 import dgram from 'react-native-udp';
 import NetInfo from '@react-native-community/netinfo';
-
-// REGLA CLEAN CODE: Evitamos "números mágicos" asignándolos a constantes.
 const PUERTO_DESCUBRIMIENTO = 53317; 
 const DIRECCION_BROADCAST = '255.255.255.255';
 
 export const useRadarUdp = () => {
-    // REGLA CLEAN CODE: Variables booleanas con prefijo "es" o "tiene"
     const [esEscaneoActivo, asignarEsEscaneoActivo] = useState(false);
 
     const enviarLatidoUdp = async () => {
         try {
-            // REQUISITO: Validar conexión Wi-Fi según especificaciones
             const estadoRed = await NetInfo.fetch();
             if (estadoRed.type !== 'wifi') {
                 console.warn('Debes estar conectado a una red Wi-Fi para usar LocalSend.');
@@ -23,16 +19,13 @@ export const useRadarUdp = () => {
             const socketUdp = dgram.createSocket({ type: 'udp4', reusePort: true });
 
             socketUdp.bind(0, () => {
-                // Encendemos el modo "Grito a toda la red"
                 socketUdp.setBroadcast(true);
 
-                // Este es el formato exacto que espera tu PC
                 const latido = JSON.stringify({
                     alias: "Celular React Native", 
                     tipo: "Móvil"
                 });
 
-                // Enviamos el mensaje al puerto 53317
                 socketUdp.send(
                     latido, 
                     0, 

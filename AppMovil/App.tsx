@@ -1,6 +1,6 @@
 import React from 'react';
 import { SafeAreaView, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
-// Importamos nuestro controlador limpio
+
 import { useRadarUdp } from './Controlador/useRadarUdp';
 
 export default function App() {
