@@ -2,16 +2,18 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 const api = {}
 const apiLocalSend = {
-    escucharDispositivosEnRed: (alEncontrarDispositivo: (dispositivo: any) => void) => {
-        ipcRenderer.on('nuevo-dispositivo-udp', (_evento, dispositivo) => {
-            alEncontrarDispositivo(dispositivo);
-        });
-    },
-    escucharProgresoTransferencia: (alActualizar: (progreso: any) => void) => {
-        ipcRenderer.on('progreso-transferencia', (_evento, progreso) => {
-            alActualizar(progreso);
-        });
-    }
+  escucharDispositivosEnRed: (alEncontrarDispositivo: (dispositivo: any) => void) => {
+    ipcRenderer.on('nuevo-dispositivo-udp', (_evento, dispositivo) => {
+      alEncontrarDispositivo(dispositivo);
+    });
+  },
+  escucharProgresoTransferencia: (alActualizar: (progreso: any) => void) => {
+    ipcRenderer.on('progreso-transferencia', (_evento, progreso) => {
+      alActualizar(progreso);
+    });
+  },
+  
+  seleccionarCarpeta: () => ipcRenderer.invoke('seleccionar-carpeta')
 };
 if (process.contextIsolated) {
   try {

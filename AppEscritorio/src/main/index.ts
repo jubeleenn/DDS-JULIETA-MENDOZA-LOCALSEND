@@ -1,11 +1,10 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import { join } from 'path';
 import dgram, { RemoteInfo } from 'dgram'; 
-import { createServer, Socket } from 'net'; // NUEVO: Para el servidor TCP
-import { createWriteStream } from 'fs';     // NUEVO: Para Streams no bloqueantes
-
+import { createServer, Socket } from 'net'; 
+import { createWriteStream } from 'fs';     
 const PUERTO_DESCUBRIMIENTO = 53317;
-const PUERTO_TRANSFERENCIA = 53318; // El puerto por donde viajarán los archivos pesados
+const PUERTO_TRANSFERENCIA = 53318; 
 const ANCHO_VENTANA = 900;
 const ALTO_VENTANA = 670;
 
@@ -49,34 +48,30 @@ function iniciarServidorDeDescubrimientoUdp(): void {
 function iniciarServidorDeTransferenciaTcp(): void {
     try {
         const servidorTcp = createServer((conexion: Socket) => {
-            // REGLA CLEAN CODE: Nombres descriptivos [5]
             let archivoStreamNoBloqueante: ReturnType<typeof createWriteStream> | null = null;
             let metadatosDelArchivo: any = null;
             let bytesRecibidos = 0;
 
             conexion.on('data', (fragmentoDatos: Buffer) => {
-                // Según la especificación, primero recibimos un JSON con metadatos y luego los chunks [2]
                 if (!metadatosDelArchivo) {
                     try {
                         metadatosDelArchivo = JSON.parse(fragmentoDatos.toString());
                         
-                        // REQUISITO: Agnosticismo de Rutas usando path.join [6]
                         const rutaDescargas = app.getPath('downloads');
                         const rutaFinalDelArchivo = join(rutaDescargas, metadatosDelArchivo.nombre);
                         
-                        // REQUISITO: Manejo de Streams No Bloqueantes [1, 2]
                         archivoStreamNoBloqueante = createWriteStream(rutaFinalDelArchivo);
                         console.log(`📥 Iniciando descarga de: ${metadatosDelArchivo.nombre}`);
                     } catch (errorDeParseo) {
                         console.error("Esperando metadatos válidos...");
                     }
                 } else {
-                    // Si ya tenemos los metadatos, escribimos los fragmentos directamente al disco
+            
                     if (archivoStreamNoBloqueante) {
                         archivoStreamNoBloqueante.write(fragmentoDatos);
                         bytesRecibidos += fragmentoDatos.length;
 
-                        // Informamos el progreso a React para actualizar la UI [1, 4]
+                        
                         const porcentaje = Math.round((bytesRecibidos / metadatosDelArchivo.peso) * 100);
                         if (ventanaPrincipal) {
                             ventanaPrincipal.webContents.send('progreso-transferencia', { 
@@ -134,16 +129,23 @@ function crearVentanaPrincipal(): void {
 }
 
 app.whenReady().then(() => {
-    crearVentanaPrincipal();
-    
-    // Encendemos ambos motores de red al iniciar la app
-    iniciarServidorDeDescubrimientoUdp(); 
-    iniciarServidorDeTransferenciaTcp();
+  crearVentanaPrincipal();
+  
+  iniciarServidorDeDescubrimientoUdp();
+  iniciarServidorDeTransferenciaTcp();
 
-    app.on('activate', () => {
-        if (BrowserWindow.getAllWindows().length === 0) crearVentanaPrincipal();
+  ipcMain.handle('seleccionar-carpeta', async () => {
+    const resultado = await dialog.showOpenDialog(ventanaPrincipal!, {
+      properties: ['openDirectory'] 
     });
+    return resultado.canceled ? null : resultado.filePaths;
+  });
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) crearVentanaPrincipal();
+  });
 });
+
 
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit();
