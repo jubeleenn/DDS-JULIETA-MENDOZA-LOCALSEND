@@ -1,6 +1,8 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron' // ✨ Agregamos webUtils aquí
 import { electronAPI } from '@electron-toolkit/preload'
+
 const api = {}
+
 const apiLocalSend = {
   escucharDispositivosEnRed: (alEncontrarDispositivo: (dispositivo: any) => void) => {
     ipcRenderer.on('nuevo-dispositivo-udp', (_evento, dispositivo) => {
@@ -12,9 +14,20 @@ const apiLocalSend = {
       alActualizar(progreso);
     });
   },
-  
-  seleccionarCarpeta: () => ipcRenderer.invoke('seleccionar-carpeta')
+  enviarArchivos: (ipDestino: string, archivos: any[]) => {
+    ipcRenderer.send('enviar-archivos', ipDestino, archivos);
+  },
+  // ✨ LO NUEVO: La llave maestra para extraer la ruta oculta
+  obtenerRuta: (archivo: File) => {
+    return webUtils.getPathForFile(archivo);
+  },
+  escucharEnvioCompletado: (alCompletar: (nombre: string) => void) => {
+    ipcRenderer.on('envio-completado', (_evento, nombre) => {
+      alCompletar(nombre);
+    });
+  }
 };
+
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', electronAPI)
