@@ -1,46 +1,20 @@
-import { contextBridge, ipcRenderer, webUtils } from 'electron' // ✨ Agregamos webUtils aquí
-import { electronAPI } from '@electron-toolkit/preload'
-
-const api = {}
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 
 const apiLocalSend = {
-  escucharDispositivosEnRed: (alEncontrarDispositivo: (dispositivo: any) => void) => {
-    ipcRenderer.on('nuevo-dispositivo-udp', (_evento, dispositivo) => {
-      alEncontrarDispositivo(dispositivo);
-    });
-  },
-  escucharProgresoTransferencia: (alActualizar: (progreso: any) => void) => {
-    ipcRenderer.on('progreso-transferencia', (_evento, progreso) => {
-      alActualizar(progreso);
-    });
-  },
-  enviarArchivos: (ipDestino: string, archivos: any[]) => {
-    ipcRenderer.send('enviar-archivos', ipDestino, archivos);
-  },
-  // ✨ LO NUEVO: La llave maestra para extraer la ruta oculta
-  obtenerRuta: (archivo: File) => {
-    return webUtils.getPathForFile(archivo);
-  },
-  escucharEnvioCompletado: (alCompletar: (nombre: string) => void) => {
-    ipcRenderer.on('envio-completado', (_evento, nombre) => {
-      alCompletar(nombre);
-    });
-  }
+  getIdentidad: () => ipcRenderer.invoke('get-identidad'),
+  getMotor: () => ipcRenderer.invoke('get-motor'),
+  getRuta: (archivo: File) => webUtils.getPathForFile(archivo),
+  responder: (respuesta: any) => ipcRenderer.send('respuesta-usuario', respuesta),
+  onPeticion: (cb: any) => ipcRenderer.on('alerta-peticion', (_e, d) => cb(d)),
+  onNodos: (cb: any) => ipcRenderer.on('nodos-detectados', (_e, d) => cb(d)),
+  onAvance: (cb: any) => ipcRenderer.on('avance-transferencia', (_e, d) => cb(d)),
+  onEstadoMotor: (cb: any) => ipcRenderer.on('estado-motor', (_e, d) => cb(d)),
+  enviar: (ipTarget: string, archivos: any[]) => ipcRenderer.send('disparar-archivos', { ipTarget, archivos })
 };
 
 if (process.contextIsolated) {
-  try {
-    contextBridge.exposeInMainWorld('electron', electronAPI)
-    contextBridge.exposeInMainWorld('api', api)
-    contextBridge.exposeInMainWorld('apiLocalSend', apiLocalSend)
-  } catch (error) {
-    console.error(error)
-  }
+  contextBridge.exposeInMainWorld('apiLocalSend', apiLocalSend);
 } else {
-  // @ts-ignore (define in dts)
-  window.electron = electronAPI
-  // @ts-ignore (define in dts)
-  window.api = api
   // @ts-ignore
-  window.apiLocalSend = apiLocalSend
+  window.apiLocalSend = apiLocalSend;
 }

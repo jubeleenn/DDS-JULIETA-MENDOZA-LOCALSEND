@@ -1,81 +1,133 @@
-import { useState, useEffect } from 'react';
-import { Download } from 'lucide-react';
-import { BarraLateral } from './Contenedor/BarraLateral';
-import { AreaDeRecepcion } from './Contenedor/AreaDeRecepcion';
-import { AreaDeEnvio } from './Contenedor/AreaDeEnvio';
-import { AreaDeAjustes } from './Contenedor/AreaDeAjustes';
-import { EstilosAnimaciones } from './Contenido/EstilosAnimaciones';
-import { useManejadorDeArrastre } from './Hooks/useManejadorDeArrastre';
+import React, { useState, useRef } from 'react';
+import { useMotorLocalSend } from './Hooks/useMotorLocalSend';
+import { Heart, UploadCloud, Smartphone, Monitor, Trash2, Sparkles } from 'lucide-react';
+import './App.css';
 
 export default function App() {
-  const [pantallaActiva, asignarPantallaActiva] = useState('recibir');
-  const [archivosGlobales, asignarArchivosGlobales] = useState<File[]>([]);
-  const [nombreColorGlobal, asignarNombreColorGlobal] = useState('LocalSend');
-  const [temaGlobal, asignarTemaGlobal] = useState('Oscuro');
+  const { identidad, enLinea, dispositivos, peticionEntrante, progreso, resolverPeticion, enviarArchivos } = useMotorLocalSend();
+  const [archivosGlobales, setArchivosGlobales] = useState<any[]>([]);
+  const [esArrastrando, setEsArrastrando] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const [aliasGlobal, asignarAliasGlobal] = useState(() => localStorage.getItem('localSend_alias') || 'Clever Banana');
-  const [carpetaGlobal, asignarCarpetaGlobal] = useState(() => localStorage.getItem('localSend_carpeta') || 'Descargas');
+  const manejarDrop = (e: React.DragEvent) => {
+    e.preventDefault(); setEsArrastrando(false);
+    const nuevos = Array.from(e.dataTransfer.files).map(f => ({
+      name: f.name, size: f.size, type: f.type || 'Archivo',
+      // @ts-ignore
+      path: window.apiLocalSend?.getRuta(f)
+    }));
+    setArchivosGlobales(prev => [...prev, ...nuevos]);
+  };
 
-  useEffect(() => { localStorage.setItem('localSend_alias', aliasGlobal); }, [aliasGlobal]);
-  useEffect(() => { localStorage.setItem('localSend_carpeta', carpetaGlobal); }, [carpetaGlobal]);
+  const iniciarTransferencia = (ip: string) => {
+    if (archivosGlobales.length > 0) enviarArchivos(ip, archivosGlobales);
+    else alert('🎀 Por favor, selecciona un archivo primero.');
+  };
 
-  const eventosDeArrastre = useManejadorDeArrastre((archivosNuevos) => {
-    asignarArchivosGlobales(previos => [...previos, ...archivosNuevos]);
-    asignarPantallaActiva('enviar');
-  });
-
-  const mapaColores: Record<string, string> = { 'LocalSend': '#a2f0d9', 'Sistema': '#78a9ff', 'Yaru': '#e95420', 'OLED': '#a9c8ff' };
-  const colorHex = mapaColores[nombreColorGlobal] || '#a2f0d9';
-  const esOscuro = temaGlobal === 'Oscuro';
-  const esFondoOled = nombreColorGlobal === 'OLED' && esOscuro;
-
-  const estilosDelTema = {
-    '--color-acento': colorHex,
-    '--color-fondo': esFondoOled ? '#000000' : (esOscuro ? '#1b2624' : '#e6f0ed'),
-    '--color-caja': esFondoOled ? '#0a0a0a' : (esOscuro ? '#16201d' : '#ffffff'),
-    '--color-texto': esOscuro ? '#ffffff' : '#333333',
-    '--color-fondo-boton': esOscuro ? '#2b3d36' : '#d0e0db',
-  } as React.CSSProperties;
+  const formatearPeso = (bytes: number) => {
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1048576).toFixed(1) + ' MB';
+  };
 
   return (
-    <main
-      onDragEnter={eventosDeArrastre.manejarEntradaDeArrastre}
-      onDragLeave={eventosDeArrastre.manejarSalidaDeArrastre}
-      onDragOver={eventosDeArrastre.prevenirComportamientoPorDefecto}
-      onDrop={eventosDeArrastre.manejarSoltarArchivo}
-      style={{ ...estilosDelTema, display: 'flex', height: '100vh', width: '100vw', fontFamily: '"Segoe UI", sans-serif', userSelect: 'none', margin: 0, backgroundColor: 'var(--color-fondo)', position: 'relative' }}
-    >
-      <BarraLateral pantallaActiva={pantallaActiva} alCambiarPantalla={asignarPantallaActiva} />
-
-      {eventosDeArrastre.esArrastreActivo && (
-        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'var(--color-fondo)', zIndex: 9999, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', color: 'var(--color-texto)', opacity: 0.95 }}>
-          <Download size={80} color="var(--color-texto)" style={{ marginBottom: '20px' }} />
-          <h2 style={{ fontSize: '28px', fontWeight: '500' }}>Suelta los archivos aquí para enviar</h2>
+    <main className="app-flotante">
+      {/* HEADER FLOTANTE TIPO PASTILLA */}
+      <header className="header-pastilla">
+        <div className="logo-contenedor">
+          <Heart size={26} fill="var(--color-acento)" className="brillo-icono" />
+          <h1 className="texto-glow">LocalSend</h1>
         </div>
-      )}
+        <div className="status-badge">
+           <div className={`led ${enLinea ? 'led-on' : 'led-off'}`} />
+           <span className="texto-brillante">{identidad === '...' ? 'Conectando...' : identidad}</span>
+        </div>
+      </header>
 
-      {pantallaActiva === 'recibir' && (
-        <AreaDeRecepcion aliasDelDispositivo={aliasGlobal} identificadorDeRed="#132" />
-      )}
+      {/* ZONA CENTRAL: ARCHIVOS */}
+      <section className="contenedor-central">
+        <div 
+          className={`drop-glass ${esArrastrando ? 'drop-activo' : ''}`}
+          onDragOver={(e) => { e.preventDefault(); setEsArrastrando(true); }}
+          onDragLeave={() => setEsArrastrando(false)}
+          onDrop={manejarDrop}
+          onClick={() => inputRef.current?.click()}
+        >
+          <UploadCloud size={60} color="var(--color-acento)" className="brillo-icono" style={{ marginBottom: '15px' }} />
+          <h2>{esArrastrando ? 'Suelta los archivos aquí ✨' : 'Arrastra archivos o toca aquí'}</h2>
+          <p>Preparando archivos para enviar</p>
+          <input type="file" multiple ref={inputRef} style={{display: 'none'}} onChange={(e) => {
+            if (e.target.files) {
+              // @ts-ignore
+              const arr = Array.from(e.target.files).map(f => ({ name: f.name, size: f.size, path: window.apiLocalSend?.getRuta(f) }));
+              setArchivosGlobales(prev => [...prev, ...arr]);
+            }
+          }} />
+        </div>
 
-      {pantallaActiva === 'enviar' && (
-        <AreaDeEnvio
-          archivosGlobales={archivosGlobales}
-          alAgregarArchivos={(nuevos) => asignarArchivosGlobales(prev => [...prev, ...nuevos])}
-          alLimpiarArchivos={() => asignarArchivosGlobales([])}
-          alEliminarArchivo={(indice) => asignarArchivosGlobales(prev => prev.filter((_, i) => i !== indice))}
-        />
-      )}
+        <div className="listado-burbujas">
+          {archivosGlobales.map((arch: any, i: number) => (
+            <div key={i} className="burbuja-archivo">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <span className="recorte-texto">{arch.name}</span>
+                <span style={{ fontSize: '12px', color: 'var(--color-acento)' }}>
+                  {formatearPeso(arch.size)}
+                </span>
+              </div>
+              <button onClick={(e) => { e.stopPropagation(); setArchivosGlobales(prev => prev.filter((_, idx) => idx !== i)); }}>
+                <Trash2 size={18} />
+              </button>
+            </div>
+          ))}
+        </div>
 
-      {pantallaActiva === 'ajustes' && (
-         <AreaDeAjustes
-            temaActual={temaGlobal}
-            alCambiarTema={asignarTemaGlobal}
-            aliasActual={aliasGlobal}
-            alCambiarAlias={asignarAliasGlobal}
-            carpetaActual={carpetaGlobal}
-            alCambiarCarpeta={asignarCarpetaGlobal}
-         />
+        {/* Progreso de Envío/Recepción */}
+        {progreso && (
+          <div className="burbuja-progreso">
+            <div className="progreso-info">
+              <span className="recorte-texto">{progreso.nombre}</span>
+              <strong className="texto-glow">{progreso.porcentaje}%</strong>
+            </div>
+            <div className="barra-fondo">
+              <div className="barra-llena" style={{ width: `${progreso.porcentaje}%` }} />
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* RADAR HORIZONTAL (Dock Inferior) */}
+      <footer className="dock-inferior">
+        <div className="titulo-dock">
+          <Sparkles size={18} color="var(--color-acento)" className="brillo-icono" />
+          <span className="texto-glow">Dispositivos Cercanos</span>
+        </div>
+        
+        <div className="carrusel-dispositivos">
+          {dispositivos.length === 0 ? <p className="mute-text">Buscando dispositivos...</p> : (
+            dispositivos.map((d: any, i: number) => (
+              <div key={i} className="burbuja-nodo" onClick={() => iniciarTransferencia(d.ip)}>
+                <div className="nodo-icono">
+                  {d.tipo === 'Computadora' ? <Monitor size={28} /> : <Smartphone size={28} />}
+                </div>
+                <strong>{d.alias}</strong>
+              </div>
+            ))
+          )}
+        </div>
+      </footer>
+
+      {/* MODAL DE RECEPCIÓN */}
+      {peticionEntrante && (
+        <div className="overlay-glass">
+          <div className="modal-coquette">
+            <Heart size={55} color="var(--color-acento)" fill="var(--color-fondo-boton)" className="latido brillo-icono" />
+            <h2 className="texto-glow">Transferencia Entrante</h2>
+            <p>¿Deseas recibir <b>{peticionEntrante.nombre}</b>?</p>
+            <div className="botones">
+              <button className="btn-secundario" onClick={() => resolverPeticion(false)}>Rechazar</button>
+              <button className="btn-primario" onClick={() => resolverPeticion(true)}>Aceptar</button>
+            </div>
+          </div>
+        </div>
       )}
     </main>
   );
