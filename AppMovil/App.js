@@ -8,10 +8,17 @@ const PUERTO_APP = 53317;
 export default function App() {
   const [dispositivos, setDispositivos] = useState([]);
   const [archivos, setArchivos] = useState([]);
+  // ✨ Le damos un nombre único a tu celular
+  const [aliasMovil] = useState(`Celular ${Math.floor(Math.random() * 1000)} 📱`);
 
+  // ✨ EL NUEVO RADAR INTELIGENTE
   useEffect(() => {
     const socket = dgram.createSocket('udp4');
-    socket.bind(PUERTO_APP);
+    socket.bind(PUERTO_APP, () => {
+      try { socket.setBroadcast(true); } catch(e){}
+    });
+
+    // ESCUCHAR Y DEVOLVER EL SALUDO
     socket.on('message', (msg, rinfo) => {
       try {
         const data = JSON.parse(msg.toString());
@@ -19,10 +26,17 @@ export default function App() {
           if (prev.find(d => d.ip === rinfo.address)) return prev;
           return [...prev, { ...data, ip: rinfo.address }];
         });
+
+        // ✨ AQUÍ ESTÁ EL TRUCO: Le devolvemos el saludo DIRECTAMENTE a la PC
+        if (data.tipo === 'Computadora') {
+          const miSaludo = JSON.stringify({ alias: aliasMovil, tipo: 'Teléfono' });
+          socket.send(miSaludo, 0, miSaludo.length, PUERTO_APP, rinfo.address);
+        }
       } catch (e) {}
     });
+
     return () => socket.close();
-  }, []);
+  }, [aliasMovil]);
 
   const seleccionarArchivos = async () => {
     try {
@@ -38,22 +52,23 @@ export default function App() {
 
   const transferirArchivo = (ip) => {
     if (archivos.length === 0) return Alert.alert("¡Atención!", "Selecciona un archivo primero 🎀");
-    const archivo = archivos; // Enviamos el primero para probar
+    const archivo = archivos; // Enviamos el primero
 
     const ws = new WebSocket(`ws://${ip}:${PUERTO_APP}`);
     ws.onopen = () => {
       ws.send(JSON.stringify({ tipo: 'PETICION_ENTRANTE', datos: { nombre: archivo.name, size: archivo.size } }));
     };
+    
     ws.onmessage = async (e) => {
       const res = JSON.parse(e.data);
       if (res.tipo === 'PETICION_ACEPTADA') {
         const response = await fetch(archivo.uri);
         const blob = await response.blob();
         ws.send(blob);
-        Alert.alert("¡Éxito!", "¡Archivo enviado a tu computadora! ✨");
-        setArchivos([]);
+        Alert.alert("¡Éxito!", "¡Transferencia completada! ✨");
+        setArchivos(prev => prev.filter((_, idx) => idx !== 0)); // Quita el enviado
       } else {
-        Alert.alert("Rechazado", "La PC rechazó el archivo 💔");
+        Alert.alert("Rechazado", "El destinatario rechazó el archivo 💔");
       }
     };
   };
@@ -61,10 +76,12 @@ export default function App() {
   return (
     <View style={styles.container}>
       <View style={styles.header}><Text style={styles.headerText}>LocalSend Móvil ✨</Text></View>
+      
       <TouchableOpacity style={styles.dropZone} onPress={seleccionarArchivos}>
         <Text style={styles.dropIcon}>📁</Text>
         <Text style={styles.dropText}>Toca para seleccionar archivos</Text>
       </TouchableOpacity>
+
       <ScrollView style={styles.archivosContainer}>
         {archivos.map((arch, i) => (
           <View key={i} style={styles.archivoBurbuja}>
@@ -76,9 +93,11 @@ export default function App() {
           </View>
         ))}
       </ScrollView>
+
+      {/* TEXTO CORREGIDO Y NEUTRAL */}
       <Text style={styles.radarTitle}>Dispositivos Cercanos 📡</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.radarContainer}>
-        {dispositivos.length === 0 ? <Text style={styles.buscando}>Buscando tu PC en la red...</Text> : (
+        {dispositivos.length === 0 ? <Text style={styles.buscando}>Buscando dispositivos cercanos...</Text> : (
           dispositivos.map((d, i) => (
             <TouchableOpacity key={i} style={styles.nodoBurbuja} onPress={() => transferirArchivo(d.ip)}>
               <Text style={styles.nodoIcon}>{d.tipo === 'Computadora' ? '💻' : '📱'}</Text>

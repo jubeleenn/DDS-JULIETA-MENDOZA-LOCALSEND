@@ -9,12 +9,12 @@ export default function App() {
   const [esArrastrando, setEsArrastrando] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // ✨ AQUÍ EXTRAEMOS LAS RUTAS FÍSICAS AL ARRASTRAR
   const manejarDrop = (e: React.DragEvent) => {
     e.preventDefault(); setEsArrastrando(false);
-    const nuevos = Array.from(e.dataTransfer.files).map(f => ({
+    const nuevos = Array.from(e.dataTransfer.files).map((f: any) => ({
       name: f.name, size: f.size, type: f.type || 'Archivo',
-      // @ts-ignore
-      path: window.apiLocalSend?.getRuta(f)
+      path: f.path 
     }));
     setArchivosGlobales(prev => [...prev, ...nuevos]);
   };
@@ -31,7 +31,6 @@ export default function App() {
 
   return (
     <main className="app-flotante">
-      {/* HEADER FLOTANTE TIPO PASTILLA */}
       <header className="header-pastilla">
         <div className="logo-contenedor">
           <Heart size={26} fill="var(--color-acento)" className="brillo-icono" />
@@ -43,7 +42,6 @@ export default function App() {
         </div>
       </header>
 
-      {/* ZONA CENTRAL: ARCHIVOS */}
       <section className="contenedor-central">
         <div 
           className={`drop-glass ${esArrastrando ? 'drop-activo' : ''}`}
@@ -55,10 +53,14 @@ export default function App() {
           <UploadCloud size={60} color="var(--color-acento)" className="brillo-icono" style={{ marginBottom: '15px' }} />
           <h2>{esArrastrando ? 'Suelta los archivos aquí ✨' : 'Arrastra archivos o toca aquí'}</h2>
           <p>Preparando archivos para enviar</p>
+          
+          {/* ✨ AQUÍ TAMBIÉN ROBAMOS EL PATH AL SELECCIONAR CON CLIC */}
           <input type="file" multiple ref={inputRef} style={{display: 'none'}} onChange={(e) => {
             if (e.target.files) {
-              // @ts-ignore
-              const arr = Array.from(e.target.files).map(f => ({ name: f.name, size: f.size, path: window.apiLocalSend?.getRuta(f) }));
+              const arr = Array.from(e.target.files).map((f: any) => ({ 
+                  name: f.name, size: f.size, 
+                  path: f.path 
+              }));
               setArchivosGlobales(prev => [...prev, ...arr]);
             }
           }} />
@@ -80,7 +82,6 @@ export default function App() {
           ))}
         </div>
 
-        {/* Progreso de Envío/Recepción */}
         {progreso && (
           <div className="burbuja-progreso">
             <div className="progreso-info">
@@ -94,7 +95,6 @@ export default function App() {
         )}
       </section>
 
-      {/* RADAR HORIZONTAL (Dock Inferior) */}
       <footer className="dock-inferior">
         <div className="titulo-dock">
           <Sparkles size={18} color="var(--color-acento)" className="brillo-icono" />
@@ -115,7 +115,6 @@ export default function App() {
         </div>
       </footer>
 
-      {/* MODAL DE RECEPCIÓN */}
       {peticionEntrante && (
         <div className="overlay-glass">
           <div className="modal-coquette">

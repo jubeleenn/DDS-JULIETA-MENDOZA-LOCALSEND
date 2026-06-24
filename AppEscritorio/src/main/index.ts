@@ -23,7 +23,7 @@ function generarIdentidad() {
   const ruta = join(app.getPath('userData'), 'identidad_coquette.json');
   try { if (fs.existsSync(ruta)) return JSON.parse(fs.readFileSync(ruta, 'utf-8')).alias; } catch (e) {}
   const adjetivos = ['Linda', 'Dulce', 'Mágica', 'Brillante', 'Tierna', 'Preciosa'];
-  const sustantivos = ['Fresa ', 'Estrella ', 'Luna ', 'Cereza ', 'Hada '];
+  const sustantivos = ['Fresa 🍓', 'Estrella ✨', 'Luna 🌙', 'Cereza 🍒', 'Hada 🧚‍♀️'];
   const nueva = `${adjetivos[Math.floor(Math.random() * adjetivos.length)]} ${sustantivos[Math.floor(Math.random() * sustantivos.length)]}`;
   try { fs.writeFileSync(ruta, JSON.stringify({ alias: nueva })); } catch (e) {}
   return nueva;
@@ -81,7 +81,9 @@ function levantarMotorWebSockets() {
 
 ipcMain.on('disparar-archivos', (_e, { ipTarget, archivos }) => {
   archivos.forEach((file: any) => {
-    if (!file.path) return;
+    // ✨ VALIDACIÓN SALVAVIDAS: Evita el error de ReadStream
+    if (typeof file.path !== 'string' || !file.path) return;
+
     const socket = new WebSocket(`ws://${ipTarget}:${PUERTO_APP}`);
     
     socket.on('open', () => {
@@ -110,6 +112,10 @@ function activarRadarUdp() {
   radarUdp.on('message', (msg, info) => {
     try {
       const paquete = JSON.parse(msg.toString());
+      
+      // ✨ LA CURA FANTASMA: Si es mi propio nombre, lo ignoro
+      if (paquete.alias === identidadCoquette) return;
+
       const misIps = Object.values(os.networkInterfaces()).flat().filter(it => it?.family === 'IPv4' && !it.internal).map(it => it?.address);
       if (!misIps.includes(info.address)) {
         nodosEnRed.set(info.address, { datos: { ...paquete, ip: info.address }, visto: Date.now() });
@@ -139,6 +145,6 @@ app.whenReady().then(() => {
   activarRadarUdp();
 });
 
-// ✨ ESTOS SON LOS DOS HANDLERS QUE FALTABAN O NO ESTABAN GUARDADOS
 ipcMain.handle('get-motor', () => motorEncendido);
 ipcMain.handle('get-identidad', () => identidadCoquette);
+app.on('window-all-closed', () => app.quit());
