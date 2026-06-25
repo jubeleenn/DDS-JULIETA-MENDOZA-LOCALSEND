@@ -13,7 +13,6 @@ const apiExterna = {
   alActualizarListaDispositivos: (callback: any) => ipcRenderer.on('actualizar-lista-dispositivos', (_e, l) => callback(l)),
   alRecibirProgreso: (callback: any) => ipcRenderer.on('progreso-transferencia', (_e, d) => callback(d)),
   
-  // ✨ LA NUEVA FUNCIÓN PARA ABRIR LA CARPETA
   abrirCarpeta: (ruta: string) => ipcRenderer.send('abrir-carpeta', ruta)
 };
 

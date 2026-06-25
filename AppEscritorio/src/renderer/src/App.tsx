@@ -25,7 +25,6 @@ export default function App() {
       
       api.alRecibirProgreso((datos: any) => {
         setProgreso(datos);
-        // ✨ Le quitamos el setTimeout aquí. ¡Ahora la barra no desaparecerá sola!
       });
     }
   }, []);
@@ -120,7 +119,6 @@ export default function App() {
               <div className="barra-llena" style={{ width: `${progreso.porcentaje}%` }} />
             </div>
 
-            {/* ✨ NUEVO: Interfaz de Archivo Completado */}
             {parseFloat(progreso.porcentaje) >= 100 && (
               <div style={{ display: 'flex', gap: '10px', marginTop: '15px', justifyContent: 'center' }}>
                 {progreso.ruta && (

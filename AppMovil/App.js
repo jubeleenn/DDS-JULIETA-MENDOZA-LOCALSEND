@@ -71,7 +71,7 @@ export default function App() {
     try {
       const result = await DocumentPicker.getDocumentAsync({ 
         multiple: true,
-        copyToCacheDirectory: true // ✨ AQUÍ ESTÁ LA MAGIA: Nos entrega una ruta file:// pura
+        copyToCacheDirectory: true 
       });
       if (!result.canceled) setArchivos(prev => [...prev, ...result.assets]);
     } catch (error) { console.error(error); }
@@ -99,13 +99,11 @@ export default function App() {
       }));
     };
     
-    // ✨ FIX: Usamos async/await y fetch para leer la ruta file:// en React Native
     ws.onmessage = async (e) => {
       const res = JSON.parse(e.data);
       if (res.accion === 'ACEPTAR_TRANSFERENCIA') {
         
         try {
-          // fetch lee la ruta local sin romper la app
           const respuestaLocal = await fetch(archivo.uri);
           const bytes = await respuestaLocal.arrayBuffer(); 
 
@@ -113,7 +111,6 @@ export default function App() {
           Alert.alert("¡Éxito!", "¡Transferencia completada! ✨");
           setArchivos(prev => prev.filter((_, idx) => idx !== 0)); 
           
-          // Un pequeño respiro antes de cerrar para asegurar el envío de datos
           setTimeout(() => {
             ws.close(); 
           }, 500);

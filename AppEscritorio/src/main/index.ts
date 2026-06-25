@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron'; // ✨ AGREGAMOS 'shell'
+import { app, BrowserWindow, ipcMain, shell } from 'electron'; 
 import { join } from 'path';
 import dgram from 'dgram';
 import http from 'http';
@@ -88,14 +88,14 @@ function iniciarServidorDeNegociacion() {
 
     socket.on('close', () => {
       if (flujoEscritura) {
-        const rutaFinal = flujoEscritura.path; // ✨ CAPTURAMOS LA RUTA FÍSICA
+        const rutaFinal = flujoEscritura.path; 
         flujoEscritura.end();
         ventanaPrincipal?.webContents.send('progreso-transferencia', {
           nombre: metadatos?.nombre || 'Archivo', 
           porcentaje: "100.00", 
           velocidad: "0.00", 
           esRecepcion: true,
-          ruta: rutaFinal // ✨ SE LA ENVIAMOS AL FRONTEND
+          ruta: rutaFinal 
         });
       }
     });
@@ -207,7 +207,6 @@ app.whenReady().then(() => {
 ipcMain.handle('obtener-estado-servidor', () => esServidorActivo);
 ipcMain.handle('obtener-alias-local', () => aliasLocal);
 
-// ✨ NUEVO: Escuchador para abrir la carpeta directamente
 ipcMain.on('abrir-carpeta', (_e, ruta) => {
   shell.showItemInFolder(ruta);
 });
