@@ -1,5 +1,5 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron'; 
-import { join } from 'path';
+import { app, BrowserWindow, ipcMain, shell, Notification, dialog } from 'electron';
+import { join, parse } from 'path';
 import dgram from 'dgram';
 import http from 'http';
 import express from 'express';
@@ -36,11 +36,8 @@ function obtenerAliasUnico() {
 
 appExpress.get('/descargar/:token', (req, res) => {
   const rutaFisica = transferenciasHttp.get(req.params.token);
-  if (rutaFisica && fs.existsSync(rutaFisica)) {
-    res.download(rutaFisica);
-  } else {
-    res.status(404).send('<h1>El archivo ya no está disponible 🎀</h1>');
-  }
+  if (rutaFisica && fs.existsSync(rutaFisica)) res.download(rutaFisica);
+  else res.status(404).send('<h1>El archivo ya no está disponible 🎀</h1>');
 });
 
 function iniciarServidorDeNegociacion() {
@@ -55,10 +52,17 @@ function iniciarServidorDeNegociacion() {
         flujoEscritura.write(datos);
         bytesRecibidos += datos.length;
         const duracion = (Date.now() - tiempoInicio) / 1000;
-        const velocidad = (bytesRecibidos / (1024 * 1024) / (duracion || 1)).toFixed(2);
+        const velocidadNum = bytesRecibidos / (1024 * 1024) / (duracion || 1);
         const porcentaje = ((bytesRecibidos / (metadatos?.size || 1)) * 100).toFixed(2);
+
+        const bytesRestantes = (metadatos?.size || 1) - bytesRecibidos;
+        const bytesPorSegundo = bytesRecibidos / (duracion || 1);
+        const segundosRestantes = Math.max(0, Math.round(bytesRestantes / bytesPorSegundo));
+        let tiempoRestante = `${segundosRestantes}s`;
+        if (segundosRestantes > 60) tiempoRestante = `${Math.floor(segundosRestantes/60)}m ${segundosRestantes%60}s`;
+
         ventanaPrincipal?.webContents.send('progreso-transferencia', {
-          nombre: metadatos?.nombre || 'Archivo', porcentaje, velocidad, esRecepcion: true
+          nombre: metadatos?.nombre || 'Archivo', porcentaje, velocidad: velocidadNum.toFixed(2), esRecepcion: true, tiempoRestante
         });
         return;
       }
@@ -67,35 +71,82 @@ function iniciarServidorDeNegociacion() {
         const mensaje = JSON.parse(datos.toString());
         if (mensaje.accion === ACCION_SOLICITAR) {
           metadatos = mensaje.metadatos;
-          ventanaPrincipal?.webContents.send('nueva-solicitud-entrada', metadatos);
 
-          ipcMain.removeAllListeners('responder-solicitud');
-          ipcMain.once('responder-solicitud', (_e, { aceptada }) => {
+          const procesarAceptacion = async (aceptada: boolean) => {
             if (aceptada) {
+              let nombreSeguro = metadatos?.nombre || `archivo_recibido_${Date.now()}.bin`;
+              let rutaDestino = join(app.getPath('downloads'), nombreSeguro);
+
+              if (fs.existsSync(rutaDestino)) {
+                  const { response } = await dialog.showMessageBox(ventanaPrincipal!, {
+                      type: 'question',
+                      buttons: ['Reemplazar', 'Mantener ambos', 'Omitir'],
+                      title: 'Archivo existente',
+                      message: `El archivo "${nombreSeguro}" ya existe en Descargas. ¿Qué deseas hacer?`,
+                      noLink: true
+                  });
+
+                  if (response === 2) { 
+                      socket.send(JSON.stringify({ accion: ACCION_RECHAZAR }));
+                      socket.close();
+                      return;
+                  } else if (response === 1) { 
+                      const partes = parse(nombreSeguro);
+                      nombreSeguro = `${partes.name}_copia_${Date.now()}${partes.ext}`;
+                      rutaDestino = join(app.getPath('downloads'), nombreSeguro);
+                  }
+              }
+
               tiempoInicio = Date.now();
-              const nombreSeguro = metadatos?.nombre || `archivo_recibido_${Date.now()}.bin`;
-              const rutaDestino = join(app.getPath('downloads'), nombreSeguro);
               flujoEscritura = fs.createWriteStream(rutaDestino);
               socket.send(JSON.stringify({ accion: ACCION_ACEPTAR }));
             } else {
               socket.send(JSON.stringify({ accion: ACCION_RECHAZAR }));
               socket.close();
             }
+          };
+
+          ventanaPrincipal?.webContents.send('nueva-solicitud-entrada', metadatos);
+
+          let yaRespondido = false;
+
+          const manejarRespuesta = (aceptada: boolean) => {
+              if (yaRespondido) return;
+              yaRespondido = true;
+              ventanaPrincipal?.webContents.send('nueva-solicitud-entrada', null);
+              procesarAceptacion(aceptada);
+          };
+
+          ipcMain.removeAllListeners('responder-solicitud');
+          ipcMain.once('responder-solicitud', (_e, { aceptada }) => {
+              manejarRespuesta(aceptada);
           });
+
+          if (!ventanaPrincipal?.isFocused() && Notification.isSupported()) {
+              const notificacion = new Notification({
+                  title: 'Transferencia Entrante 🎀',
+                  body: `¿Deseas recibir ${metadatos.nombre}?`,
+                  actions: [{ type: 'button', text: 'Aceptar' }, { type: 'button', text: 'Rechazar' }]
+              });
+              notificacion.on('action', (_event, index) => {
+                  if (index === 0) manejarRespuesta(true);
+                  else manejarRespuesta(false);
+              });
+              notificacion.on('click', () => {
+                  ventanaPrincipal?.focus();
+              });
+              notificacion.show();
+          }
         }
       } catch (e) { console.error("Error al procesar el mensaje", e); }
     });
 
     socket.on('close', () => {
       if (flujoEscritura) {
-        const rutaFinal = flujoEscritura.path; 
+        const rutaFinal = flujoEscritura.path as string; 
         flujoEscritura.end();
         ventanaPrincipal?.webContents.send('progreso-transferencia', {
-          nombre: metadatos?.nombre || 'Archivo', 
-          porcentaje: "100.00", 
-          velocidad: "0.00", 
-          esRecepcion: true,
-          ruta: rutaFinal 
+          nombre: metadatos?.nombre || 'Archivo', porcentaje: "100.00", velocidad: "0.00", esRecepcion: true, ruta: rutaFinal, tiempoRestante: "0s"
         });
       }
     });
@@ -119,9 +170,8 @@ ipcMain.on('iniciar-envio-archivos', (_e, { direccionIp, archivos }) => {
         transferenciasHttp.set(token, archivo.path); 
         const aviso = JSON.stringify({ accion: 'DESCARGA_HTTP_MOVIL', metadatos: { nombre: archivo.name, size: archivo.size, token } });
         servidorUdp.send(aviso, PUERTO_OFICIAL, direccionIp);
-
         ventanaPrincipal?.webContents.send('estado-negociacion-emisor', { nombre: archivo.name, estado: 'aceptada' });
-        ventanaPrincipal?.webContents.send('progreso-transferencia', { nombre: archivo.name, porcentaje: "100.00", velocidad: "Enviado link al celular", esRecepcion: false });
+        ventanaPrincipal?.webContents.send('progreso-transferencia', { nombre: archivo.name, porcentaje: "100.00", velocidad: "Enviado link", esRecepcion: false, tiempoRestante: "0s" });
         return; 
     }
 
@@ -145,8 +195,15 @@ ipcMain.on('iniciar-envio-archivos', (_e, { direccionIp, archivos }) => {
           bytesEnviados += chunk.length;
           socket.send(chunk);
           const duracion = (Date.now() - tiempoInicio) / 1000;
+          
+          const bytesRestantes = archivo.size - bytesEnviados;
+          const bytesPorSegundo = bytesEnviados / (duracion || 1);
+          const segundosRestantes = Math.max(0, Math.round(bytesRestantes / bytesPorSegundo));
+          let tiempoRestante = `${segundosRestantes}s`; // ✨ CAMBIADO A tiempoRestante
+          if (segundosRestantes > 60) tiempoRestante = `${Math.floor(segundosRestantes/60)}m ${segundosRestantes%60}s`;
+
           ventanaPrincipal?.webContents.send('progreso-transferencia', {
-            nombre: archivo.name, porcentaje: ((bytesEnviados / archivo.size) * 100).toFixed(2), velocidad: (bytesEnviados / (1024 * 1024) / (duracion || 1)).toFixed(2), esRecepcion: false
+            nombre: archivo.name, porcentaje: ((bytesEnviados / archivo.size) * 100).toFixed(2), velocidad: (bytesEnviados / (1024 * 1024) / (duracion || 1)).toFixed(2), esRecepcion: false, tiempoRestante
           });
         });
         flujoLectura.on('end', () => socket.close());
@@ -189,6 +246,8 @@ function iniciarDescubrimientoUdp() {
 }
 
 app.whenReady().then(() => {
+  app.setAppUserModelId('com.localsend.app');
+
   aliasLocal = obtenerAliasUnico();
   ventanaPrincipal = new BrowserWindow({
     width: 900, height: 670, show: false, autoHideMenuBar: true,
@@ -206,9 +265,5 @@ app.whenReady().then(() => {
 
 ipcMain.handle('obtener-estado-servidor', () => esServidorActivo);
 ipcMain.handle('obtener-alias-local', () => aliasLocal);
-
-ipcMain.on('abrir-carpeta', (_e, ruta) => {
-  shell.showItemInFolder(ruta);
-});
-
+ipcMain.on('abrir-carpeta', (_e, ruta) => shell.showItemInFolder(ruta));
 app.on('window-all-closed', () => app.quit());
