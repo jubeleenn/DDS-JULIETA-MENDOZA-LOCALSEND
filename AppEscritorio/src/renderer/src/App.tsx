@@ -1,27 +1,55 @@
-import React, { useState, useRef } from 'react';
-import { useMotorLocalSend } from './Hooks/useMotorLocalSend';
+import React, { useState, useEffect, useRef } from 'react';
 import { Heart, UploadCloud, Smartphone, Monitor, Trash2, Sparkles } from 'lucide-react';
 import './App.css';
 
 export default function App() {
-  const { identidad, enLinea, dispositivos, peticionEntrante, progreso, resolverPeticion, enviarArchivos } = useMotorLocalSend();
+  const [identidad, setIdentidad] = useState('...');
+  const [enLinea, setEnLinea] = useState(false);
+  const [dispositivos, setDispositivos] = useState<any[]>([]);
+  const [peticionEntrante, setPeticionEntrante] = useState<any>(null);
+  const [progreso, setProgreso] = useState<any>(null);
+
   const [archivosGlobales, setArchivosGlobales] = useState<any[]>([]);
   const [esArrastrando, setEsArrastrando] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // ✨ AQUÍ EXTRAEMOS LAS RUTAS FÍSICAS AL ARRASTRAR
+  useEffect(() => {
+    // @ts-ignore
+    const api = window.apiExterna;
+    if (api) {
+      api.obtenerAliasLocal().then(setIdentidad);
+      api.solicitarEstadoDelServidor().then(setEnLinea);
+      api.alRecibirCambioDeEstado(setEnLinea);
+      api.alActualizarListaDispositivos(setDispositivos);
+      api.alRecibirSolicitud(setPeticionEntrante);
+      
+      api.alRecibirProgreso((datos: any) => {
+        setProgreso(datos);
+        // ✨ Le quitamos el setTimeout aquí. ¡Ahora la barra no desaparecerá sola!
+      });
+    }
+  }, []);
+
+  const resolverPeticion = (aceptar: boolean) => {
+    // @ts-ignore
+    window.apiExterna?.responderSolicitud({ aceptada: aceptar });
+    setPeticionEntrante(null);
+  };
+
+  const iniciarTransferencia = (ip: string) => {
+    if (archivosGlobales.length === 0) return alert('🎀 Por favor, selecciona un archivo primero.');
+    // @ts-ignore
+    window.apiExterna?.enviarArchivosADispositivo(ip, archivosGlobales);
+  };
+
   const manejarDrop = (e: React.DragEvent) => {
     e.preventDefault(); setEsArrastrando(false);
     const nuevos = Array.from(e.dataTransfer.files).map((f: any) => ({
       name: f.name, size: f.size, type: f.type || 'Archivo',
-      path: f.path 
+      // @ts-ignore
+      path: window.apiExterna?.obtenerRutaReal ? window.apiExterna.obtenerRutaReal(f) : f.path 
     }));
     setArchivosGlobales(prev => [...prev, ...nuevos]);
-  };
-
-  const iniciarTransferencia = (ip: string) => {
-    if (archivosGlobales.length > 0) enviarArchivos(ip, archivosGlobales);
-    else alert('🎀 Por favor, selecciona un archivo primero.');
   };
 
   const formatearPeso = (bytes: number) => {
@@ -54,12 +82,12 @@ export default function App() {
           <h2>{esArrastrando ? 'Suelta los archivos aquí ✨' : 'Arrastra archivos o toca aquí'}</h2>
           <p>Preparando archivos para enviar</p>
           
-          {/* ✨ AQUÍ TAMBIÉN ROBAMOS EL PATH AL SELECCIONAR CON CLIC */}
           <input type="file" multiple ref={inputRef} style={{display: 'none'}} onChange={(e) => {
             if (e.target.files) {
               const arr = Array.from(e.target.files).map((f: any) => ({ 
                   name: f.name, size: f.size, 
-                  path: f.path 
+                  // @ts-ignore
+                  path: window.apiExterna?.obtenerRutaReal ? window.apiExterna.obtenerRutaReal(f) : f.path 
               }));
               setArchivosGlobales(prev => [...prev, ...arr]);
             }
@@ -83,7 +111,7 @@ export default function App() {
         </div>
 
         {progreso && (
-          <div className="burbuja-progreso">
+          <div className="burbuja-progreso" style={{ height: 'auto', paddingBottom: '15px' }}>
             <div className="progreso-info">
               <span className="recorte-texto">{progreso.nombre}</span>
               <strong className="texto-glow">{progreso.porcentaje}%</strong>
@@ -91,6 +119,32 @@ export default function App() {
             <div className="barra-fondo">
               <div className="barra-llena" style={{ width: `${progreso.porcentaje}%` }} />
             </div>
+
+            {/* ✨ NUEVO: Interfaz de Archivo Completado */}
+            {parseFloat(progreso.porcentaje) >= 100 && (
+              <div style={{ display: 'flex', gap: '10px', marginTop: '15px', justifyContent: 'center' }}>
+                {progreso.ruta && (
+                  <button 
+                    className="btn-primario" 
+                    onClick={() => {
+                        // @ts-ignore
+                        window.apiExterna?.abrirCarpeta(progreso.ruta);
+                        setProgreso(null);
+                    }}
+                    style={{ fontSize: '13px', padding: '8px 15px' }}
+                  >
+                    Abrir archivo
+                  </button>
+                )}
+                <button 
+                  className="btn-secundario" 
+                  onClick={() => setProgreso(null)}
+                  style={{ fontSize: '13px', padding: '8px 15px' }}
+                >
+                  Cerrar
+                </button>
+              </div>
+            )}
           </div>
         )}
       </section>
@@ -104,7 +158,7 @@ export default function App() {
         <div className="carrusel-dispositivos">
           {dispositivos.length === 0 ? <p className="mute-text">Buscando dispositivos...</p> : (
             dispositivos.map((d: any, i: number) => (
-              <div key={i} className="burbuja-nodo" onClick={() => iniciarTransferencia(d.ip)}>
+              <div key={i} className="burbuja-nodo" onClick={() => iniciarTransferencia(d.direccionIp)}>
                 <div className="nodo-icono">
                   {d.tipo === 'Computadora' ? <Monitor size={28} /> : <Smartphone size={28} />}
                 </div>

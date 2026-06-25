@@ -1,26 +1,30 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { electronAPI } from '@electron-toolkit/preload';
 
-const apiLocalSend = {
-  // Escuchamos el radar y el progreso
-  escucharDispositivosEnRed: (cb: any) => ipcRenderer.on('nuevo-dispositivo-udp', (_e, d) => cb(d)),
-  escucharProgresoTransferencia: (cb: any) => ipcRenderer.on('progreso-transferencia', (_e, d) => cb(d)),
-  
-  // ✨ LA MAGIA: Robamos la ruta física real del archivo para que no explote
+const apiExterna = {
+  obtenerAliasLocal: () => ipcRenderer.invoke('obtener-alias-local'),
+  solicitarEstadoDelServidor: () => ipcRenderer.invoke('obtener-estado-servidor'),
   obtenerRutaReal: (archivo: File) => webUtils.getPathForFile(archivo),
+  enviarArchivosADispositivo: (direccionIp: string, archivos: any[]) => ipcRenderer.send('iniciar-envio-archivos', { direccionIp, archivos }),
+  responderSolicitud: (respuesta: any) => ipcRenderer.send('responder-solicitud', respuesta),
+  alRecibirSolicitud: (callback: any) => ipcRenderer.on('nueva-solicitud-entrada', (_e, d) => callback(d)),
+  alCambiarEstadoNegociacion: (callback: any) => ipcRenderer.on('estado-negociacion-emisor', (_e, d) => callback(d)),
+  alRecibirCambioDeEstado: (callback: any) => ipcRenderer.on('notificar-estado-servidor', (_e, s) => callback(s)),
+  alActualizarListaDispositivos: (callback: any) => ipcRenderer.on('actualizar-lista-dispositivos', (_e, l) => callback(l)),
+  alRecibirProgreso: (callback: any) => ipcRenderer.on('progreso-transferencia', (_e, d) => callback(d)),
   
-  // Enviamos los archivos al motor
-  enviarArchivos: (ip: string, archivos: any[]) => ipcRenderer.send('iniciar-envio', { ip, archivos })
+  // ✨ LA NUEVA FUNCIÓN PARA ABRIR LA CARPETA
+  abrirCarpeta: (ruta: string) => ipcRenderer.send('abrir-carpeta', ruta)
 };
 
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', electronAPI);
-    contextBridge.exposeInMainWorld('apiLocalSend', apiLocalSend);
+    contextBridge.exposeInMainWorld('apiExterna', apiExterna);
   } catch (error) { console.error(error); }
 } else {
   // @ts-ignore
   window.electron = electronAPI;
   // @ts-ignore
-  window.apiLocalSend = apiLocalSend;
+  window.apiExterna = apiExterna;
 }
