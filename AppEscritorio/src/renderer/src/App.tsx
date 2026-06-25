@@ -22,10 +22,7 @@ export default function App() {
       api.alRecibirCambioDeEstado(setEnLinea);
       api.alActualizarListaDispositivos(setDispositivos);
       api.alRecibirSolicitud(setPeticionEntrante);
-      
-      api.alRecibirProgreso((datos: any) => {
-        setProgreso(datos);
-      });
+      api.alRecibirProgreso(setProgreso);
     }
   }, []);
 
@@ -119,6 +116,15 @@ export default function App() {
               <div className="barra-llena" style={{ width: `${progreso.porcentaje}%` }} />
             </div>
 
+            {/* ✨ EL TIEMPO ESTIMADO Y VELOCIDAD (Cumpliendo Requisito B del Manual) */}
+            {parseFloat(progreso.porcentaje) < 100 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', fontSize: '12px', color: '#8a9994', fontWeight: '500' }}>
+                    <span>{progreso.velocidad} MB/s</span>
+                    <span>Faltan: {progreso.tiempoEstimado || 'Calculando...'}</span>
+                </div>
+            )}
+
+            {/* Interfaz de Archivo Completado */}
             {parseFloat(progreso.porcentaje) >= 100 && (
               <div style={{ display: 'flex', gap: '10px', marginTop: '15px', justifyContent: 'center' }}>
                 {progreso.ruta && (
@@ -134,13 +140,7 @@ export default function App() {
                     Abrir archivo
                   </button>
                 )}
-                <button 
-                  className="btn-secundario" 
-                  onClick={() => setProgreso(null)}
-                  style={{ fontSize: '13px', padding: '8px 15px' }}
-                >
-                  Cerrar
-                </button>
+                <button className="btn-secundario" onClick={() => setProgreso(null)} style={{ fontSize: '13px', padding: '8px 15px' }}> Cerrar </button>
               </div>
             )}
           </div>
